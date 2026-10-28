@@ -1,0 +1,113 @@
+2026-10-05T14:22:00.0000000Z Current runner version: '2.329.0'
+2026-10-05T14:22:00.0091237Z ##[group]Runner Image Provisioner
+2026-10-05T14:22:00.0182474Z Hosted Compute Agent
+2026-10-05T14:22:00.0273711Z ##[endgroup]
+2026-10-05T14:22:00.0364948Z ##[group]Run actions/checkout@v4
+2026-10-05T14:22:00.0456185Z with:
+2026-10-05T14:22:00.0547422Z   repository: shubham98983/inventory-management-demo
+2026-10-05T14:22:00.0638659Z ##[endgroup]
+2026-10-05T14:22:00.0729896Z Syncing repository: shubham98983/inventory-management-demo
+2026-10-05T14:22:00.0821133Z ##[group]Run pip install -r requirements-dev.txt
+2026-10-05T14:22:00.0912370Z pip install -r requirements-dev.txt
+2026-10-05T14:22:00.1003607Z shell: /usr/bin/bash -e {0}
+2026-10-05T14:22:00.1094844Z ##[endgroup]
+2026-10-05T14:22:00.1186081Z Collecting Flask==2.2.2 (from -r requirements.txt (line 1))
+2026-10-05T14:22:00.1277318Z   Downloading Flask-2.2.2-py3-none-any.whl (101 kB)
+2026-10-05T14:22:00.1368555Z Successfully installed Flask-2.2.2 Jinja2-3.1.2 PyJWT-2.3.0 Werkzeug-2.2.2 gunicorn-20.1.0 pytest-8.3.3 pytest-cov-5.0.0 requests-2.28.0 ruff-0.6.9 urllib3-1.26.5
+2026-10-05T14:22:00.1459792Z ##[group]Run ruff check . --output-format=github
+2026-10-05T14:22:00.1551029Z ruff check . --output-format=github
+2026-10-05T14:22:00.1642266Z ##[endgroup]
+2026-10-05T14:22:00.1733503Z ::error title=Ruff (F401),file=/home/runner/work/inventory-management-demo/inventory-management-demo/config.py,line=3,col=1,endLine=3,endColumn=9::config.py:3:1: F401 `json` imported but unused
+2026-10-05T14:22:00.1824740Z ::error title=Ruff (F401),file=/home/runner/work/inventory-management-demo/inventory-management-demo/app/routes/stock.py,line=1,col=1,endLine=1,endColumn=9::app/routes/stock.py:1:1: F401 `os` imported but unused
+2026-10-05T14:22:00.1915977Z ::error title=Ruff (F401),file=/home/runner/work/inventory-management-demo/inventory-management-demo/app/routes/products.py,line=38,col=1,endLine=38,endColumn=9::app/routes/products.py:38:1: E711 Comparison to `None` should be `cond is None`
+2026-10-05T14:22:00.2007214Z ::error title=Ruff (F401),file=/home/runner/work/inventory-management-demo/inventory-management-demo/app/utils/formatters.py,line=14,col=1,endLine=14,endColumn=9::app/utils/formatters.py:14:1: E722 Do not use bare `except`
+2026-10-05T14:22:00.2098451Z ##[error]Process completed with exit code 1.
+2026-10-05T14:22:00.2189688Z ##[group]Run pytest --cov=app --cov-report=xml --cov-report=term --junitxml=pytest-report.xml
+2026-10-05T14:22:00.2280925Z pytest --cov=app --cov-report=xml --cov-report=term --junitxml=pytest-report.xml
+2026-10-05T14:22:00.2372162Z shell: /usr/bin/bash -e {0}
+2026-10-05T14:22:00.2463399Z ##[endgroup]
+2026-10-05T14:22:00.2554636Z ============================= test session starts ==============================
+2026-10-05T14:22:00.2645873Z platform linux -- Python 3.12.3, pytest-8.3.3, pluggy-1.7.0
+2026-10-05T14:22:00.2737110Z rootdir: /home/runner/work/inventory-management-demo/inventory-management-demo
+2026-10-05T14:22:00.2828347Z configfile: pyproject.toml
+2026-10-05T14:22:00.2919584Z testpaths: tests
+2026-10-05T14:22:00.3010821Z plugins: cov-5.0.0
+2026-10-05T14:22:00.3102058Z collected 47 items
+2026-10-05T14:22:00.3193295Z 
+2026-10-05T14:22:00.3284532Z tests/test_auth.py .....                                                 [ 10%]
+2026-10-05T14:22:00.3375769Z tests/test_inventory_service.py ...F......                               [ 31%]
+2026-10-05T14:22:00.3467006Z tests/test_pricing.py ............                                       [ 57%]
+2026-10-05T14:22:00.3558243Z tests/test_products.py .......                                           [ 72%]
+2026-10-05T14:22:00.3649480Z tests/test_sales_service.py ......                                       [ 85%]
+2026-10-05T14:22:00.3740717Z tests/test_validators.py .......                                         [100%]
+2026-10-05T14:22:00.3831954Z 
+2026-10-05T14:22:00.3923191Z =================================== FAILURES ===================================
+2026-10-05T14:22:00.4014428Z ________________________ test_is_low_stock_at_threshold ________________________
+2026-10-05T14:22:00.4105665Z 
+2026-10-05T14:22:00.4196902Z     def test_is_low_stock_at_threshold():
+2026-10-05T14:22:00.4288139Z         """Stock equal to the reorder level should already trigger a low-stock alert."""
+2026-10-05T14:22:00.4379376Z >       assert inventory_service.is_low_stock(make(10, reorder_level=10)) is True
+2026-10-05T14:22:00.4470613Z E       AssertionError: assert False is True
+2026-10-05T14:22:00.4561850Z E        +  where False = <function is_low_stock at 0x7f99e166cc20>(Product(id=1, sku='T-1', name='T', price=1.0, description='', category_id=None, supplier_id=None, cost=0.0, quantity=10, reorder_level=10, created_at=''))
+2026-10-05T14:22:00.4653087Z E        +    where <function is_low_stock at 0x7f99e166cc20> = inventory_service.is_low_stock
+2026-10-05T14:22:00.4744324Z E        +    and   Product(id=1, sku='T-1', name='T', price=1.0, description='', category_id=None, supplier_id=None, cost=0.0, quantity=10, reorder_level=10, created_at='') = make(10, reorder_level=10)
+2026-10-05T14:22:00.4835561Z 
+2026-10-05T14:22:00.4926798Z tests/test_inventory_service.py:26: AssertionError
+2026-10-05T14:22:00.5018035Z --------------- generated xml file: /home/runner/work/inventory-management-demo/inventory-management-demo/pytest-report.xml ---------------
+2026-10-05T14:22:00.5109272Z 
+2026-10-05T14:22:00.5200509Z ---------- coverage: platform linux, python 3.12.3-final-0 -----------
+2026-10-05T14:22:00.5291746Z Name                                Stmts   Miss  Cover
+2026-10-05T14:22:00.5382983Z -------------------------------------------------------
+2026-10-05T14:22:00.5474220Z app/__init__.py                        24      3    88%
+2026-10-05T14:22:00.5565457Z app/db.py                              27      2    93%
+2026-10-05T14:22:00.5656694Z app/models/__init__.py                  0      0   100%
+2026-10-05T14:22:00.5747931Z app/models/base.py                     10      0   100%
+2026-10-05T14:22:00.5839168Z app/models/category.py                  7      0   100%
+2026-10-05T14:22:00.5930405Z app/models/product.py                  20      2    90%
+2026-10-05T14:22:00.6021642Z app/models/sale.py                     22      1    95%
+2026-10-05T14:22:00.6112879Z app/models/stock_movement.py           11      0   100%
+2026-10-05T14:22:00.6204116Z app/models/supplier.py                 10      0   100%
+2026-10-05T14:22:00.6295353Z app/models/user.py                     16      1    94%
+2026-10-05T14:22:00.6386590Z app/repositories/__init__.py            0      0   100%
+2026-10-05T14:22:00.6477827Z app/repositories/category_repo.py      25     17    32%
+2026-10-05T14:22:00.6569064Z app/repositories/product_repo.py       58      9    84%
+2026-10-05T14:22:00.6660301Z app/repositories/sale_repo.py          34     14    59%
+2026-10-05T14:22:00.6751538Z app/repositories/stock_repo.py         10      0   100%
+2026-10-05T14:22:00.6842775Z app/repositories/supplier_repo.py      22     15    32%
+2026-10-05T14:22:00.6934012Z app/repositories/user_repo.py          23      2    91%
+2026-10-05T14:22:00.7025249Z app/routes/__init__.py                  0      0   100%
+2026-10-05T14:22:00.7116486Z app/routes/alerts.py                   14      4    71%
+2026-10-05T14:22:00.7207723Z app/routes/auth.py                     31      2    94%
+2026-10-05T14:22:00.7298960Z app/routes/categories.py               37     20    46%
+2026-10-05T14:22:00.7390197Z app/routes/health.py                    5      1    80%
+2026-10-05T14:22:00.7481434Z app/routes/products.py                 62      4    94%
+2026-10-05T14:22:00.7572671Z app/routes/reports.py                  45     17    62%
+2026-10-05T14:22:00.7663908Z app/routes/sales.py                    33     18    45%
+2026-10-05T14:22:00.7755145Z app/routes/stock.py                    40     24    40%
+2026-10-05T14:22:00.7846382Z app/routes/suppliers.py                42     22    48%
+2026-10-05T14:22:00.7937619Z app/services/__init__.py                0      0   100%
+2026-10-05T14:22:00.8028856Z app/services/alert_service.py          16     10    38%
+2026-10-05T14:22:00.8120093Z app/services/auth_service.py           31      9    71%
+2026-10-05T14:22:00.8211330Z app/services/inventory_service.py      26      2    92%
+2026-10-05T14:22:00.8302567Z app/services/pricing_service.py        21      0   100%
+2026-10-05T14:22:00.8393804Z app/services/report_service.py         16     11    31%
+2026-10-05T14:22:00.8485041Z app/services/sales_service.py          32      4    88%
+2026-10-05T14:22:00.8576278Z app/utils/__init__.py                   0      0   100%
+2026-10-05T14:22:00.8667515Z app/utils/backup.py                    10      6    40%
+2026-10-05T14:22:00.8758752Z app/utils/csv_export.py                16     12    25%
+2026-10-05T14:22:00.8849989Z app/utils/decorators.py                24      4    83%
+2026-10-05T14:22:00.8941226Z app/utils/formatters.py                22     10    55%
+2026-10-05T14:22:00.9032463Z app/utils/logger.py                     5      5     0%
+2026-10-05T14:22:01.0000000Z app/utils/security.py                   5      1    80%
+2026-10-05T14:22:01.0091237Z app/utils/validators.py                65     18    72%
+2026-10-05T14:22:01.0182474Z -------------------------------------------------------
+2026-10-05T14:22:01.0273711Z TOTAL                                 917    270    71%
+2026-10-05T14:22:01.0364948Z 
+2026-10-05T14:22:01.0456185Z =========================== short test summary info ============================
+2026-10-05T14:22:01.0547422Z FAILED tests/test_inventory_service.py::test_is_low_stock_at_threshold - Asse...
+2026-10-05T14:22:01.0638659Z ========================= 1 failed, 46 passed in 1.65s =========================
+2026-10-05T14:22:01.0729896Z ##[error]Process completed with exit code 1.
+2026-10-05T14:22:01.0821133Z ##[group]Run actions/upload-artifact@v4
+2026-10-05T14:22:01.0912370Z ##[endgroup]
+2026-10-05T14:22:01.1003607Z Artifact test-reports.zip successfully finalized.
+2026-10-05T14:22:01.1094844Z Cleaning up orphan processes

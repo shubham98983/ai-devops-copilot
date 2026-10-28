@@ -1,0 +1,54 @@
+{
+ "total_count": 3,
+ "workflow_runs": [
+  {
+   "id": 3001,
+   "name": "CI",
+   "display_title": "Fix is_low_stock threshold",
+   "event": "pull_request",
+   "head_branch": "fix/low-stock-threshold",
+   "head_sha": "84eae5e377823db28bf2deec7eca874d3815d64f",
+   "run_number": 3,
+   "status": "completed",
+   "conclusion": "success",
+   "html_url": "https://github.com/shubham98983/inventory-management-demo/actions/runs/3001",
+   "created_at": "2026-10-06T18:10:00Z",
+   "updated_at": "2026-10-06T18:12:00Z",
+   "head_commit": {
+    "message": "Fix low stock threshold comparison\n\nlong body"
+   }
+  },
+  {
+   "id": 2002,
+   "name": "CI",
+   "display_title": "Update ci.yml",
+   "event": "push",
+   "head_branch": "main",
+   "head_sha": "c10bf2b0000000000000000000000000000000aa",
+   "run_number": 2,
+   "status": "completed",
+   "conclusion": "failure",
+   "html_url": "https://github.com/shubham98983/inventory-management-demo/actions/runs/2002",
+   "created_at": "2026-10-05T15:00:00Z",
+   "updated_at": "2026-10-05T15:01:00Z",
+   "head_commit": {
+    "message": "Update ci.yml"
+   }
+  },
+  {
+   "id": 1001,
+   "name": "CI",
+   "display_title": "Add CI workflow and Dockerfile",
+   "event": "push",
+   "head_branch": "main",
+   "head_sha": "dc217be0000000000000000000000000000000bb",
+   "run_number": 1,
+   "status": "in_progress",
+   "conclusion": null,
+   "html_url": "https://github.com/shubham98983/inventory-management-demo/actions/runs/1001",
+   "created_at": "2026-10-05T14:21:00Z",
+   "updated_at": "2026-10-05T14:22:00Z",
+   "head_commit": null
+  }
+ ]
+}

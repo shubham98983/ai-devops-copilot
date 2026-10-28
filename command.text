@@ -1,0 +1,4 @@
+cd ~/ai-devops-copilot
+source .venv/bin/activate
+ls -a | grep "^.env$"          # must print .env, which holds your keys
+uvicorn app.main:app --host 0.0.0.0 --port 8000

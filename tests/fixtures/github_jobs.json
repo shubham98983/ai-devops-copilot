@@ -1,0 +1,66 @@
+{
+ "total_count": 3,
+ "jobs": [
+  {
+   "id": 5001,
+   "name": "Lint and test",
+   "status": "completed",
+   "conclusion": "failure",
+   "html_url": "https://github.com/shubham98983/inventory-management-demo/actions/runs/2002/job/5001",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success"
+    },
+    {
+     "name": "Lint (Ruff)",
+     "status": "completed",
+     "conclusion": "failure"
+    },
+    {
+     "name": "Test (pytest + coverage)",
+     "status": "completed",
+     "conclusion": "failure"
+    },
+    {
+     "name": "Upload test reports",
+     "status": "completed",
+     "conclusion": "success"
+    }
+   ]
+  },
+  {
+   "id": 5002,
+   "name": "Security scans",
+   "status": "completed",
+   "conclusion": "success",
+   "html_url": "https://github.com/shubham98983/inventory-management-demo/actions/runs/2002/job/5002",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success"
+    },
+    {
+     "name": "Semgrep (code)",
+     "status": "completed",
+     "conclusion": "success"
+    },
+    {
+     "name": "Trivy (dependencies and secrets)",
+     "status": "completed",
+     "conclusion": "success"
+    }
+   ]
+  },
+  {
+   "id": 5003,
+   "name": "Docker build and health check",
+   "status": "completed",
+   "conclusion": "skipped",
+   "html_url": "https://github.com/shubham98983/inventory-management-demo/actions/runs/2002/job/5003",
+   "steps": []
+  }
+ ]
+}

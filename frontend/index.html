@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI DevOps Copilot</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="pipeline.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">&#9881;</span> AI DevOps Copilot</div>
+    <div class="topbar-right"><span id="health" class="pill">connecting&hellip;</span></div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <section class="card">
+        <h2>Connect a repository</h2>
+        <form id="repo-form" autocomplete="off">
+          <input id="repo-url" type="url" required placeholder="https://github.com/owner/repo">
+          <button type="submit" id="repo-submit" class="primary">Index repository</button>
+        </form>
+        <p id="repo-error" class="error" hidden></p>
+      </section>
+
+      <section class="card">
+        <h2>Repositories</h2>
+        <ul id="repo-list" class="repo-list"></ul>
+        <p id="repo-empty" class="muted">No repositories yet.</p>
+      </section>
+
+      <section class="card" id="repo-details" hidden>
+        <h2>Selected repository</h2>
+        <dl id="repo-meta" class="meta"></dl>
+      </section>
+    </aside>
+
+    <main class="main">
+      <nav class="tabs">
+        <button class="tab active" data-mode="chat">Ask the repo</button>
+        <button class="tab" data-mode="search">Semantic search</button>
+        <button class="tab" data-mode="pipeline">Pipeline</button>
+      </nav>
+
+      <div id="empty-state" class="empty-state">
+        <h1>Understand any repository in minutes</h1>
+        <p>Paste a GitHub URL on the left, wait for indexing to finish, then ask questions
+        about how the code works. Answers cite the exact files and line ranges.</p>
+      </div>
+
+      <section id="chat-panel" class="panel" hidden>
+        <div id="suggestions" class="suggestions"></div>
+        <div id="messages" class="messages"></div>
+        <form id="chat-form" class="composer" autocomplete="off">
+          <input id="chat-input" type="text" placeholder="Ask about the code, e.g. How does authentication work?" maxlength="2000">
+          <button type="submit" class="primary" id="chat-submit">Ask</button>
+        </form>
+      </section>
+
+      <section id="search-panel" class="panel" hidden>
+        <form id="search-form" class="composer" autocomplete="off">
+          <input id="search-input" type="text" placeholder="Search by meaning or identifier, e.g. is_low_stock" maxlength="300">
+          <select id="search-language" aria-label="Language filter">
+            <option value="">All languages</option>
+            <option value="python">Python</option>
+            <option value="js">JavaScript</option>
+            <option value="markdown">Markdown</option>
+            <option value="yaml">YAML</option>
+            <option value="sql">SQL</option>
+          </select>
+          <button type="submit" class="primary">Search</button>
+        </form>
+        <div id="search-results" class="results"></div>
+      </section>
+          <!-- pipeline monitor (milestone 2) -->
+      <section id="pipeline-panel" class="panel" hidden></section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="pipeline.js"></script>
+</body>
+</html>

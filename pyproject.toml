@@ -1,0 +1,16 @@
+[project]
+name = "ai-devops-copilot"
+version = "0.1.0"
+description = "AI DevOps Copilot: repo-aware Q&A (RAG), CI/CD automation and analysis"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
