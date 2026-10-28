@@ -1,0 +1,1 @@
+<testsuite name="pytest" tests="4" failures="1" errors="0" skipped="1" time="0.42"><testcase name="ok"/><testcase name="bad"><failure message="assertion failed"/></testcase></testsuite>

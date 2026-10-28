@@ -3,10 +3,13 @@
 The VM is behind NAT, so GitHub cannot call us. We poll this API instead.
 """
 import os
+import io
+import zipfile
 
 import httpx
 
 API_ROOT = "https://api.github.com"
+MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
 
 
 class GitHubError(RuntimeError):
@@ -125,3 +128,56 @@ class GitHubClient:
                 "Downloading job logs needs a GitHub token. Set GITHUB_TOKEN in .env and restart.", 401
             )
         return self._get(f"/repos/{owner}/{name}/actions/jobs/{job_id}/logs").text
+
+    def list_artifacts(self, owner, name, run_id):
+        data = self._get(f"/repos/{owner}/{name}/actions/runs/{run_id}/artifacts", {"per_page": 100}).json()
+        return data.get("artifacts", [])
+
+    def download_artifact(self, owner, name, artifact_id):
+        """Download a small artifact ZIP without forwarding credentials off GitHub."""
+        if not self.token:
+            raise GitHubError("Downloading artifacts needs a GitHub token. Set GITHUB_TOKEN in .env and restart.", 401)
+        url = f"/repos/{owner}/{name}/actions/artifacts/{artifact_id}/zip"
+        try:
+            with self._http.stream("GET", url, follow_redirects=False) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise GitHubError("GitHub returned an invalid artifact redirect.", 502)
+                    # The signed storage URL is fetched by a client with no GitHub headers.
+                    with httpx.Client(timeout=self._http.timeout, follow_redirects=True) as download:
+                        with download.stream("GET", location) as redirected:
+                            self._raise_for_status(redirected)
+                            return self._read_bounded(redirected)
+                self._raise_for_status(response)
+                return self._read_bounded(response)
+        except httpx.HTTPError as error:
+            raise GitHubError(f"Cannot download artifact: {error.__class__.__name__}", 502) from error
+
+    @staticmethod
+    def _read_bounded(response):
+        chunks, size = [], 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > MAX_ARTIFACT_BYTES:
+                raise GitHubError("Artifact exceeds the 20 MB download limit.", 413)
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    @staticmethod
+    def read_artifact_members(blob, expected_names):
+        """Return only named files from an in-memory zip, rejecting oversized archives/members."""
+        if len(blob) > MAX_ARTIFACT_BYTES:
+            raise GitHubError("Artifact exceeds the 20 MB download limit.", 413)
+        try:
+            with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                expected = set(expected_names)
+                found = {}
+                for info in archive.infolist():
+                    if info.filename in expected and not info.is_dir():
+                        if info.file_size > MAX_ARTIFACT_BYTES:
+                            raise GitHubError("Artifact member exceeds the 20 MB limit.", 413)
+                        found[info.filename] = archive.read(info)
+                return found
+        except (zipfile.BadZipFile, OSError) as error:
+            raise GitHubError("GitHub returned an invalid artifact ZIP.", 502) from error
