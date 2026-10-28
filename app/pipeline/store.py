@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS runs (
     analysis_json TEXT DEFAULT '',
     PRIMARY KEY (repo_id, run_id)
 )
+;
+CREATE TABLE IF NOT EXISTS run_reports (
+    repo_id TEXT NOT NULL, run_id INTEGER NOT NULL, reports_json TEXT NOT NULL DEFAULT '{}',
+    explanation_json TEXT NOT NULL DEFAULT '', PRIMARY KEY(repo_id, run_id)
+)
 """
 
 RUN_FIELDS = (
@@ -92,3 +97,27 @@ def save_analysis(repo_id, run_id, analysis):
             "UPDATE runs SET analysis_json = ? WHERE repo_id = ? AND run_id = ?",
             (json.dumps(analysis), repo_id, run_id),
         )
+
+
+def get_report(repo_id, run_id):
+    with _connect() as db:
+        row = db.execute("SELECT * FROM run_reports WHERE repo_id=? AND run_id=?", (repo_id, run_id)).fetchone()
+    if row is None: return None
+    data = dict(row)
+    data["reports"] = json.loads(data.pop("reports_json") or "{}")
+    raw = data.pop("explanation_json") or ""
+    data["explanation"] = json.loads(raw) if raw else None
+    return data
+
+
+def save_report(repo_id, run_id, reports):
+    with _connect() as db:
+        db.execute("INSERT INTO run_reports(repo_id,run_id,reports_json) VALUES(?,?,?) "
+                   "ON CONFLICT(repo_id,run_id) DO UPDATE SET reports_json=excluded.reports_json",
+                   (repo_id, run_id, json.dumps(reports)))
+
+
+def save_explanation(repo_id, run_id, explanation):
+    with _connect() as db:
+        db.execute("UPDATE run_reports SET explanation_json=? WHERE repo_id=? AND run_id=?",
+                   (json.dumps(explanation), repo_id, run_id))

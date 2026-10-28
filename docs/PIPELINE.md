@@ -47,6 +47,15 @@ Failed run -> download the failed job logs
 | GET | `/api/repos/{id}/pipeline/runs` | Stored runs, newest first |
 | GET | `/api/repos/{id}/pipeline/runs/{run_id}` | One run with its full analysis |
 | POST | `/api/repos/{id}/pipeline/runs/{run_id}/analyze?force=` | Analyse a failed run |
+| POST | `/api/repos/{id}/pipeline/runs/{run_id}/reports` | Fetch/cache and parse CI report artifacts |
+| POST | `/api/repos/{id}/pipeline/runs/{run_id}/security/explain?force=` | Explain findings with indexed code |
+| GET | `/api/repos/{id}/pipeline/summary` | Per-branch latest run and recent quality scores |
+
+Completed runs among the newest five are checked for `security-reports` and `test-reports` artifacts; parsed reports are cached per run.
+The expected members are `semgrep-report.json`, `trivy-report.json`, `pytest-report.xml`, and
+`coverage.xml`. ZIP members are read in memory, only by exact member name, and downloads are capped
+at 20 MB. Parsed findings are capped at 200 per run. The dashboard quality score weights security
+50%, coverage 30%, and passing tests 20%; lint is not included because it is absent from these reports.
 
 ## Safety choices
 

@@ -7,7 +7,7 @@
   if (!panel) return;
 
   const view = {
-    repoId: null, runs: [], status: null, error: "", syncing: false,
+    repoId: null, runs: [], status: null, summary: null, reports: {}, selectedReportRun: null, explaining: {}, error: "", syncing: false,
     open: {}, analyzing: {}, errors: {}, timer: null, loaded: false,
   };
 
@@ -45,7 +45,22 @@
   /* ---------- data ---------- */
   async function loadRuns(repoId) {
     view.runs = await api(base(repoId) + "/runs");
+    if (state.mode === "dashboard") view.summary = await api(base(repoId) + "/summary");
     view.loaded = true;
+  }
+
+  async function loadReport(runId) {
+    view.errors["report-" + runId] = "";
+    try { view.reports[runId] = await api(base(view.repoId) + "/runs/" + runId + "/reports", { method: "POST" }); }
+    catch (err) { view.errors["report-" + runId] = err.message; }
+    render();
+  }
+
+  async function explainSecurity(runId) {
+    view.explaining[runId] = true; render();
+    try { view.reports[runId].explanation = await api(base(view.repoId) + "/runs/" + runId + "/security/explain", { method: "POST" }, 180000); }
+    catch (err) { view.errors["explain-" + runId] = err.message; }
+    view.explaining[runId] = false; render();
   }
 
   async function sync(repoId) {
@@ -73,7 +88,7 @@
 
   async function activate(repoId) {
     if (view.repoId !== repoId) {
-      Object.assign(view, { repoId, runs: [], status: null, error: "", open: {}, analyzing: {}, errors: {}, loaded: false });
+      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, selectedReportRun: null, explaining: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false });
       render();
       try { view.status = await api(base(repoId) + "/status"); } catch (err) { view.error = err.message; }
       try { await loadRuns(repoId); } catch (err) { view.error = view.error || err.message; }
@@ -255,6 +270,7 @@
 
   function render() {
     panel.replaceChildren(renderToolbar());
+    if (state.mode === "dashboard") renderDashboard();
     if (view.status && !view.status.github_token_configured) {
       panel.appendChild(el("p", "banner",
         "No GITHUB_TOKEN is set. You can list public runs (60 requests per hour), but downloading logs " +
@@ -269,7 +285,48 @@
         : "Loading runs…"));
     }
     view.runs.forEach((run) => list.appendChild(renderRun(run)));
+    if (state.mode === "pipeline") {
+      panel.appendChild(el("h3", null, "Security findings"));
+      const selector = el("select"); selector.setAttribute("aria-label", "Run security report");
+      view.runs.forEach((run) => { const option = el("option", null, run.name + " #" + (run.run_number || run.run_id)); option.value = run.run_id; if (String(run.run_id) === String(view.selectedReportRun)) option.selected = true; selector.appendChild(option); });
+      selector.addEventListener("change", () => { view.selectedReportRun = Number(selector.value); render(); });
+      panel.appendChild(selector);
+      const reportButton = el("button", "primary", "Load security findings"); reportButton.addEventListener("click", () => { view.selectedReportRun = Number(selector.value); loadReport(view.selectedReportRun); }); panel.appendChild(reportButton);
+      const selected = view.selectedReportRun || Number(selector.value);
+      const current = view.reports[selected];
+      if (current) panel.appendChild(renderSecurity(current, selected));
+      if (view.errors["report-" + selected]) panel.appendChild(el("p", "error", view.errors["report-" + selected]));
+      if (view.errors["explain-" + selected]) panel.appendChild(el("p", "error", view.errors["explain-" + selected]));
+    }
     panel.appendChild(list);
+  }
+
+  function renderDashboard() {
+    const summary = view.summary;
+    const cards = el("div", "dashboard-grid");
+    const latest = summary && summary.branches && summary.branches[0];
+    const addCard = (title, value, extra) => { const card = el("article", "dashboard-card"); card.appendChild(el("h3", null, title)); card.appendChild(el("strong", null, value)); if (extra) card.appendChild(el("p", "muted", extra)); cards.appendChild(card); };
+    addCard("CI status", latest ? latest.conclusion || latest.status : "No run", latest ? latest.branch : "");
+    const tests = latest && latest.tests;
+    addCard("Tests", tests ? (tests.tests - tests.failures - tests.errors - tests.skipped) + " passed / " + (tests.failures + tests.errors) + " failed" : "No report");
+    addCard("Coverage", latest ? latest.coverage_percent + "%" : "No report");
+    addCard("Quality score", latest ? String(latest.quality_score) : "—", latest ? "Security " + latest.security + " · coverage " + latest.coverage + " · tests " + latest.test_pass_percent + "%" : "");
+    if (latest && latest.findings_by_severity) addCard("Security", "Critical " + latest.findings_by_severity.critical + " · High " + latest.findings_by_severity.high + " · Medium " + latest.findings_by_severity.medium + " · Low " + latest.findings_by_severity.low);
+    panel.appendChild(cards);
+    if (latest && latest.ai_top_actions && latest.ai_top_actions.length) { panel.appendChild(el("h3", null, "AI top actions")); const actions = el("ol"); latest.ai_top_actions.forEach((action) => actions.appendChild(el("li", null, action))); panel.appendChild(actions); }
+    const scores = summary ? summary.last_10_scores : [];
+    const trend = el("svg", "score-trend"); trend.setAttribute("viewBox", "0 0 500 110"); trend.setAttribute("role", "img"); trend.setAttribute("aria-label", "Quality score trend for recent runs");
+    if (scores.length) { const points = scores.map((item, i) => (scores.length === 1 ? 250 : i * 480 / (scores.length - 1) + 10) + "," + (100 - item.score)).join(" "); const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline"); line.setAttribute("points", points); line.setAttribute("fill", "none"); line.setAttribute("stroke", "currentColor"); line.setAttribute("stroke-width", "3"); trend.appendChild(line); }
+    panel.appendChild(trend);
+  }
+
+  function renderSecurity(report, runId) {
+    const section = el("div", "security-list");
+    (report.findings || []).forEach((finding) => { const row = el("article", "security-finding"); row.appendChild(el("strong", null, finding.severity.toUpperCase() + " · " + finding.rule_id)); row.appendChild(el("p", null, finding.title)); row.appendChild(el("code", null, finding.path + (finding.line ? ":" + finding.line : ""))); if (finding.package) row.appendChild(el("p", "muted", finding.package + " " + finding.installed + (finding.fixed ? " → " + finding.fixed : ""))); section.appendChild(row); });
+    const button = el("button", "primary", view.explaining[runId] ? "Explaining…" : "Explain with AI"); button.disabled = Boolean(view.explaining[runId]); button.addEventListener("click", () => explainSecurity(runId)); section.appendChild(button);
+    const explanation = report.explanation;
+    if (explanation) { section.appendChild(el("h3", null, explanation.summary)); const actions = el("ol"); (explanation.top_actions || []).forEach((action) => actions.appendChild(el("li", null, action))); section.appendChild(actions); (explanation.findings || []).forEach((item) => { const card = el("article", "security-finding"); card.appendChild(el("strong", null, item.rule_id + " · priority " + item.priority)); card.appendChild(el("p", null, item.explanation)); card.appendChild(el("p", null, "Impact: " + item.impact)); card.appendChild(el("p", null, "Fix: " + item.fix)); section.appendChild(card); }); }
+    return section;
   }
 
   /* ---------- hook into the existing tab logic ---------- */
@@ -277,7 +334,7 @@
   updatePanels = function () {
     baseUpdatePanels();
     const repo = selectedRepo();
-    const show = Boolean(repo && repo.status === "ready") && state.mode === "pipeline";
+    const show = Boolean(repo && repo.status === "ready") && (state.mode === "pipeline" || state.mode === "dashboard");
     panel.hidden = !show;
     if (show) activate(repo.id); else stopTimer();
   };
