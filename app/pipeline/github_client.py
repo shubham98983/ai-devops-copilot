@@ -2,8 +2,9 @@
 
 The VM is behind NAT, so GitHub cannot call us. We poll this API instead.
 """
-import os
+
 import io
+import os
 import zipfile
 
 import httpx
@@ -136,7 +137,9 @@ class GitHubClient:
     def download_artifact(self, owner, name, artifact_id):
         """Download a small artifact ZIP without forwarding credentials off GitHub."""
         if not self.token:
-            raise GitHubError("Downloading artifacts needs a GitHub token. Set GITHUB_TOKEN in .env and restart.", 401)
+            raise GitHubError(
+                "Downloading artifacts needs a GitHub token. Set GITHUB_TOKEN in .env and restart.", 401
+            )
         url = f"/repos/{owner}/{name}/actions/artifacts/{artifact_id}/zip"
         try:
             with self._http.stream("GET", url, follow_redirects=False) as response:
