@@ -44,3 +44,11 @@ a.ext { color: var(--accent); text-decoration: none; } a.ext:hover { text-decora
 .analysis-meta { margin-top: 12px; color: var(--muted); font-size: 12px; }
 .warn-text { color: var(--warn); margin-top: 4px; }
 .link-button { margin-top: 10px; background: none; border: none; color: var(--accent); padding: 0; cursor: pointer; font-size: 12px; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 14px 0; }
+.dashboard-card, .security-finding { border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); padding: 12px; }
+.dashboard-card h3 { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.dashboard-card strong { font-size: 20px; }
+.dashboard-card p { margin: 6px 0 0; }
+.score-trend { width: 100%; height: 110px; color: var(--accent); margin: 4px 0 14px; }
+.security-list { display: grid; gap: 8px; margin: 12px 0 20px; }
+.security-finding p { margin: 6px 0; }
