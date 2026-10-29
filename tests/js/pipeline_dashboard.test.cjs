@@ -13,6 +13,7 @@ Object.defineProperty(window.document, "hidden", { value: false });
 const summaryRequests = [];
 const runRequests = [];
 const reportRequests = [];
+const reportUrls = [];
 const intervalCallbacks = [];
 const selected = { id: "repo-1" };
 let intervalDelay = null;
@@ -33,6 +34,7 @@ window.api = async (url) => {
   const reportMatch = url.match(/\/runs\/(\d+)\/reports$/);
   if (reportMatch) {
     reportRequests.push(Number(reportMatch[1]));
+    reportUrls.push(url);
     return new Promise((resolve, reject) => {
       resolveReportRequest = () => {
         if (Number(reportMatch[1]) === 14) reject(new Error("report unavailable"));
@@ -115,17 +117,26 @@ setTimeout(async () => {
     runItems = [
       { run_id: 16, run_number: 16, name: "CI", status: "completed", conclusion: "success" },
       { run_id: 15, run_number: 15, name: "CI", status: "completed", conclusion: "success" },
-      { run_id: 14, run_number: 3, name: "Team approval gate", status: "completed", conclusion: "success" },
+      { run_id: 14, run_number: 14, name: "CI", status: "completed", conclusion: "success" },
+      { run_id: 13, run_number: 3, name: "Team approval gate", status: "completed", conclusion: "success" },
     ];
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.ok(runRequests.length >= 2, "switching from Dashboard to Pipeline should load the runs");
     const selector = window.document.querySelector('select[aria-label="Run security report"]');
     assert.ok(selector);
-    assert.equal(selector.options.length, 2, "approval gate events should not be offered as CI report runs");
-    selector.value = "15";
+    assert.equal(selector.options.length, 3, "approval gate events should not be offered as CI report runs");
+    selector.selectedIndex = 1;
     selector.dispatchEvent(new window.Event("change", { bubbles: true }));
     assert.equal(window.document.querySelector('select[aria-label="Run security report"]'), selector,
       "changing the run should not replace the native selector");
+    selector.focus();
+    runItems = [...runItems, { run_id: 12, run_number: 12, name: "CI", status: "completed", conclusion: "success" }];
+    await intervalCallbacks[0]();
+    assert.equal(selector.value, "15", "refresh should keep the user's second-run selection");
+    assert.equal(window.document.querySelector('select[aria-label="Run security report"]'), selector,
+      "refresh should not rebuild a focused selector");
+    selector.blur();
+    assert.equal(window.document.querySelector('select[aria-label="Run security report"]').value, "15");
     const loadButton = [...window.document.querySelectorAll("button")]
       .find((button) => button.textContent === "Load security findings");
     loadButton.click();
@@ -137,7 +148,9 @@ setTimeout(async () => {
     resolveReportRequest();
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.deepEqual(reportRequests, [15], "selected run should be used to load its report");
-    assert.match(window.document.getElementById("pipeline-panel").textContent, /No security findings for this run/);
+    assert.match(reportUrls[0], /\/runs\/15\/reports$/,
+      "the API path parameter is the selected GitHub run ID, not its run number");
+    assert.match(window.document.getElementById("pipeline-panel").textContent, /No security report for this run/);
     assert.equal(
       window.document.querySelector('select[aria-label="Run security report"]').value,
       "15",

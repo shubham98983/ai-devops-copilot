@@ -8,7 +8,7 @@
 
   const view = {
     repoId: null, runs: [], status: null, summary: null, reports: {}, explaining: {}, loadingReports: {}, error: "", syncing: false,
-    selectedReportRunId: null,
+    selectedRunId: null, pendingRender: false, pendingRenderTimer: null,
     open: {}, analyzing: {}, errors: {}, timer: null, loaded: false, summaryRepoId: null, mode: null,
   };
 
@@ -57,6 +57,7 @@
   async function loadReport(runId) {
     view.errors["report-" + runId] = "";
     view.loadingReports[runId] = true;
+    delete view.reports[runId];
     render();
     try { view.reports[runId] = await api(base(view.repoId) + "/runs/" + runId + "/reports", { method: "POST" }); }
     catch (err) { view.errors["report-" + runId] = err.message; }
@@ -98,7 +99,7 @@
 
   async function activate(repoId) {
     if (view.repoId !== repoId) {
-      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, loadingReports: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false, selectedReportRunId: null });
+      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, loadingReports: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false, selectedRunId: null, pendingRender: false });
       render();
       try { view.status = await api(base(repoId) + "/status"); } catch (err) { view.error = err.message; }
       try { await loadRuns(repoId); } catch (err) { view.error = view.error || err.message; }
@@ -288,6 +289,16 @@
   }
 
   function render() {
+    const currentSelector = panel.querySelector('select[aria-label="Run security report"]');
+    if (currentSelector && document.activeElement === currentSelector) {
+      view.pendingRender = true;
+      return;
+    }
+    if (view.pendingRenderTimer) {
+      clearTimeout(view.pendingRenderTimer);
+      view.pendingRenderTimer = null;
+    }
+    view.pendingRender = false;
     panel.replaceChildren(renderToolbar());
     if (state.mode === "dashboard") renderDashboard();
     if (view.status && !view.status.github_token_configured) {
@@ -316,19 +327,19 @@
       selectableRuns.forEach((run) => {
         const option = el("option", null, run.name + " #" + (run.run_number || run.run_id));
         option.value = run.run_id;
-        option.selected = String(run.run_id) === String(view.selectedReportRunId);
+        option.selected = String(run.run_id) === String(view.selectedRunId);
         selector.appendChild(option);
       });
-      if (!selectableRuns.some((run) => String(run.run_id) === String(view.selectedReportRunId))) {
-        view.selectedReportRunId = selectableRuns.length ? selectableRuns[0].run_id : null;
+      if (!selectableRuns.some((run) => String(run.run_id) === String(view.selectedRunId))) {
+        view.selectedRunId = selectableRuns.length ? selectableRuns[0].run_id : null;
         if (selector.options.length) selector.options[0].selected = true;
       }
       panel.appendChild(selector);
-      const selectedRunId = Number(view.selectedReportRunId);
+      const selectedRunId = Number(view.selectedRunId);
       const loading = Boolean(view.loadingReports[selectedRunId]);
       const reportButton = el("button", "primary", loading ? "Loading findings…" : "Load security findings");
-      reportButton.disabled = !view.selectedReportRunId || loading || !selectableRuns.length;
-      reportButton.addEventListener("click", () => loadReport(Number(view.selectedReportRunId)));
+      reportButton.disabled = !view.selectedRunId || loading || !selectableRuns.length;
+      reportButton.addEventListener("click", () => loadReport(Number(view.selectedRunId)));
       panel.appendChild(reportButton);
       const results = el("div", "security-results");
       panel.appendChild(results);
@@ -336,16 +347,25 @@
         results.replaceChildren();
         const report = view.reports[runId];
         if (report && report.findings && report.findings.length) results.appendChild(renderSecurity(report, runId));
-        else if (report) results.appendChild(el("p", "muted", "No security findings for this run."));
+        else if (report) results.appendChild(el("p", "muted", "No security report for this run."));
         if (view.errors["report-" + runId]) results.appendChild(el("p", "error", view.errors["report-" + runId]));
         if (view.errors["explain-" + runId]) results.appendChild(el("p", "error", view.errors["explain-" + runId]));
       };
       selector.addEventListener("change", () => {
-        view.selectedReportRunId = Number(selector.value);
-        const runId = view.selectedReportRunId;
+        view.selectedRunId = Number(selector.value);
+        const runId = view.selectedRunId;
         reportButton.disabled = Boolean(view.loadingReports[runId]);
         reportButton.textContent = view.loadingReports[runId] ? "Loading findings…" : "Load security findings";
         showReport(runId);
+      });
+      selector.addEventListener("blur", () => {
+        if (view.pendingRender) {
+          view.pendingRenderTimer = setTimeout(() => render(), 150);
+        }
+      });
+      reportButton.addEventListener("mousedown", () => {
+        if (view.pendingRenderTimer) clearTimeout(view.pendingRenderTimer);
+        view.pendingRenderTimer = null;
       });
       showReport(selectedRunId);
     }
