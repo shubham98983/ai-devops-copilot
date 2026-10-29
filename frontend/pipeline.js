@@ -347,7 +347,11 @@
         results.replaceChildren();
         const report = view.reports[runId];
         if (report && report.findings && report.findings.length) results.appendChild(renderSecurity(report, runId));
-        else if (report) results.appendChild(el("p", "muted", "No security report for this run."));
+        else if (report) results.appendChild(el(
+          "p",
+          "muted",
+          report.security_report_reason || "No security report for this run.",
+        ));
         if (view.errors["report-" + runId]) results.appendChild(el("p", "error", view.errors["report-" + runId]));
         if (view.errors["explain-" + runId]) results.appendChild(el("p", "error", view.errors["explain-" + runId]));
       };

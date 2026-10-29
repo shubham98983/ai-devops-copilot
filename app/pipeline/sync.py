@@ -17,6 +17,7 @@ def fetch_reports(repo_id, repo, run_id, client):
         "tests": None,
         "coverage_percent": None,
         "available": {"security": False, "tests": False, "coverage": False},
+        "security_report_reason": "No security report artifact found for this run.",
     }
     errors = []
     expected_members = {
@@ -35,6 +36,12 @@ def fetch_reports(repo_id, repo, run_id, client):
             files = client.read_artifact_members(blob, expected_members[artifact_name])
         except Exception as error:  # noqa: BLE001 - keep other artifacts and runs available
             errors.append(str(error)[:500] or error.__class__.__name__)
+            log.debug(
+                "Fetched report artifact for run %s artifact %s: %s findings",
+                run_id,
+                artifact.get("id"),
+                len(parsed["findings"]),
+            )
             continue
 
         try:
@@ -49,6 +56,7 @@ def fetch_reports(repo_id, repo, run_id, client):
                     )
                     parsed["findings"].extend(parser(files[filename]))
                     parsed["available"]["security"] = True
+                    parsed["security_report_reason"] = ""
             else:
                 if "pytest-report.xml" in files:
                     parsed["tests"] = report_parser.parse_junit(files["pytest-report.xml"])
@@ -58,6 +66,12 @@ def fetch_reports(repo_id, repo, run_id, client):
                     parsed["available"]["coverage"] = True
         except Exception as error:  # noqa: BLE001 - continue with remaining report artifacts
             errors.append(str(error)[:500] or error.__class__.__name__)
+        log.debug(
+            "Fetched report artifact for run %s artifact %s: %s findings",
+            run_id,
+            artifact.get("id"),
+            len(parsed["findings"]),
+        )
 
     parsed["findings"] = parsed["findings"][: report_parser.MAX_FINDINGS]
     store.save_report(repo_id, run_id, parsed)
