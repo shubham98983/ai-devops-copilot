@@ -8,6 +8,7 @@
 
   const view = {
     repoId: null, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", syncing: false,
+    selectedReportRunId: null,
     open: {}, analyzing: {}, errors: {}, timer: null, loaded: false, summaryRepoId: null, mode: null,
   };
 
@@ -92,7 +93,7 @@
 
   async function activate(repoId) {
     if (view.repoId !== repoId) {
-      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false });
+      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false, selectedReportRunId: null });
       render();
       try { view.status = await api(base(repoId) + "/status"); } catch (err) { view.error = err.message; }
       try { await loadRuns(repoId); } catch (err) { view.error = view.error || err.message; }
@@ -301,13 +302,27 @@
     if (state.mode === "pipeline") {
       panel.appendChild(el("h3", null, "Security findings"));
       const selector = el("select"); selector.setAttribute("aria-label", "Run security report");
-      view.runs.forEach((run) => { const option = el("option", null, run.name + " #" + (run.run_number || run.run_id)); option.value = run.run_id; selector.appendChild(option); });
+      view.runs.forEach((run) => {
+        const option = el("option", null, run.name + " #" + (run.run_number || run.run_id));
+        option.value = run.run_id;
+        option.selected = String(run.run_id) === String(view.selectedReportRunId);
+        selector.appendChild(option);
+      });
+      if (!view.runs.some((run) => String(run.run_id) === String(view.selectedReportRunId))) {
+        view.selectedReportRunId = view.runs.length ? view.runs[0].run_id : null;
+        if (selector.options.length) selector.options[0].selected = true;
+      }
+      selector.addEventListener("change", () => {
+        view.selectedReportRunId = Number(selector.value);
+        render();
+      });
       panel.appendChild(selector);
-      const reportButton = el("button", "primary", "Load security findings"); reportButton.addEventListener("click", () => loadReport(Number(selector.value))); panel.appendChild(reportButton);
-      const current = view.reports[Number(selector.value)];
-      if (current) panel.appendChild(renderSecurity(current, Number(selector.value)));
-      if (view.errors["report-" + selector.value]) panel.appendChild(el("p", "error", view.errors["report-" + selector.value]));
-      if (view.errors["explain-" + selector.value]) panel.appendChild(el("p", "error", view.errors["explain-" + selector.value]));
+      const selectedRunId = Number(view.selectedReportRunId);
+      const reportButton = el("button", "primary", "Load security findings"); reportButton.disabled = !view.selectedReportRunId; reportButton.addEventListener("click", () => loadReport(selectedRunId)); panel.appendChild(reportButton);
+      const current = view.reports[selectedRunId];
+      if (current) panel.appendChild(renderSecurity(current, selectedRunId));
+      if (view.errors["report-" + selectedRunId]) panel.appendChild(el("p", "error", view.errors["report-" + selectedRunId]));
+      if (view.errors["explain-" + selectedRunId]) panel.appendChild(el("p", "error", view.errors["explain-" + selectedRunId]));
     }
     panel.appendChild(list);
   }
@@ -399,6 +414,12 @@
     if (show) activate(repo.id); else stopTimer();
     if (repo && repo.status === "ready" && (repoChanged || (state.mode === "dashboard" && modeChanged))) {
       loadSummary(repo.id).then(render).catch((err) => {
+        view.error = err.message;
+        render();
+      });
+    }
+    if (repo && repo.status === "ready" && state.mode === "pipeline" && modeChanged && !repoChanged) {
+      loadRuns(repo.id).then(render).catch((err) => {
         view.error = err.message;
         render();
       });

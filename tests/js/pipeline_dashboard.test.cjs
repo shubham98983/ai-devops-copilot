@@ -4,16 +4,20 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 
 const repo = path.resolve(__dirname, "../..");
-const html = `<!doctype html><nav><button class="tab" data-mode="dashboard"></button></nav>
+const html = `<!doctype html><nav><button class="tab" data-mode="dashboard"></button>
+<button class="tab" data-mode="pipeline"></button></nav>
 <section id="pipeline-panel"></section>`;
 const dom = new JSDOM(html, { runScripts: "outside-only", url: "http://localhost/" });
 const { window } = dom;
 Object.defineProperty(window.document, "hidden", { value: false });
 const summaryRequests = [];
+const runRequests = [];
+const reportRequests = [];
 const intervalCallbacks = [];
 const selected = { id: "repo-1" };
 let intervalDelay = null;
 let reportAvailable = true;
+let runItems = [];
 window.setInterval = (callback, delay) => {
   intervalCallbacks.push(callback);
   intervalDelay = delay;
@@ -24,7 +28,12 @@ window.state = { mode: "dashboard" };
 window.selectedRepo = () => ({ ...selected, status: "ready" });
 window.api = async (url) => {
   if (url.endsWith("/status")) return { repository: "octo/demo", github_token_configured: true };
-  if (url.endsWith("/runs")) return [];
+  if (url.endsWith("/runs")) { runRequests.push(url); return runItems; }
+  const reportMatch = url.match(/\/runs\/(\d+)\/reports$/);
+  if (reportMatch) {
+    reportRequests.push(Number(reportMatch[1]));
+    return { findings: [], explanation: null };
+  }
   if (url.endsWith("/summary")) {
     summaryRequests.push(url);
     return {
@@ -90,6 +99,26 @@ setTimeout(async () => {
     assert.equal(summaryRequests.length, 2, "dashboard timer should refresh the summary");
     window.state.mode = "pipeline";
     window.updatePanels();
+    runItems = [
+      { run_id: 16, run_number: 16, name: "CI", status: "completed", conclusion: "success" },
+      { run_id: 15, run_number: 15, name: "CI", status: "completed", conclusion: "success" },
+    ];
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(runRequests.length >= 2, "switching from Dashboard to Pipeline should load the runs");
+    const selector = window.document.querySelector('select[aria-label="Run security report"]');
+    assert.ok(selector);
+    selector.value = "15";
+    selector.dispatchEvent(new window.Event("change", { bubbles: true }));
+    const loadButton = [...window.document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Load security findings");
+    loadButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(reportRequests, [15], "selected run should be used to load its report");
+    assert.equal(
+      window.document.querySelector('select[aria-label="Run security report"]').value,
+      "15",
+      "rerendering after report load should keep the selected run",
+    );
     window.state.mode = "dashboard";
     window.updatePanels();
     await new Promise((resolve) => setTimeout(resolve, 10));
