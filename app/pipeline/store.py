@@ -1,4 +1,5 @@
 """SQLite storage for workflow runs and their AI analysis."""
+
 import json
 import sqlite3
 
@@ -26,13 +27,23 @@ CREATE TABLE IF NOT EXISTS runs (
 ;
 CREATE TABLE IF NOT EXISTS run_reports (
     repo_id TEXT NOT NULL, run_id INTEGER NOT NULL, reports_json TEXT NOT NULL DEFAULT '{}',
-    explanation_json TEXT NOT NULL DEFAULT '', PRIMARY KEY(repo_id, run_id)
+    explanation_json TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(repo_id, run_id)
 )
 """
 
 RUN_FIELDS = (
-    "run_number", "name", "event", "branch", "head_sha", "message",
-    "status", "conclusion", "html_url", "created_at", "updated_at",
+    "run_number",
+    "name",
+    "event",
+    "branch",
+    "head_sha",
+    "message",
+    "status",
+    "conclusion",
+    "html_url",
+    "created_at",
+    "updated_at",
 )
 
 
@@ -41,7 +52,10 @@ def _connect():
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(settings.data_dir / "registry.db")
     connection.row_factory = sqlite3.Row
-    connection.execute(SCHEMA)
+    connection.executescript(SCHEMA)
+    report_columns = {row["name"] for row in connection.execute("PRAGMA table_info(run_reports)")}
+    if "error_message" not in report_columns:
+        connection.execute("ALTER TABLE run_reports ADD COLUMN error_message TEXT NOT NULL DEFAULT ''")
     return connection
 
 
@@ -76,9 +90,7 @@ def upsert_run(repo_id, run, jobs=None):
 
 def get_run(repo_id, run_id):
     with _connect() as db:
-        row = db.execute(
-            "SELECT * FROM runs WHERE repo_id = ? AND run_id = ?", (repo_id, run_id)
-        ).fetchone()
+        row = db.execute("SELECT * FROM runs WHERE repo_id = ? AND run_id = ?", (repo_id, run_id)).fetchone()
     return _to_dict(row)
 
 
@@ -101,8 +113,11 @@ def save_analysis(repo_id, run_id, analysis):
 
 def get_report(repo_id, run_id):
     with _connect() as db:
-        row = db.execute("SELECT * FROM run_reports WHERE repo_id=? AND run_id=?", (repo_id, run_id)).fetchone()
-    if row is None: return None
+        row = db.execute(
+            "SELECT * FROM run_reports WHERE repo_id=? AND run_id=?", (repo_id, run_id)
+        ).fetchone()
+    if row is None:
+        return None
     data = dict(row)
     data["reports"] = json.loads(data.pop("reports_json") or "{}")
     raw = data.pop("explanation_json") or ""
@@ -112,12 +127,26 @@ def get_report(repo_id, run_id):
 
 def save_report(repo_id, run_id, reports):
     with _connect() as db:
-        db.execute("INSERT INTO run_reports(repo_id,run_id,reports_json) VALUES(?,?,?) "
-                   "ON CONFLICT(repo_id,run_id) DO UPDATE SET reports_json=excluded.reports_json",
-                   (repo_id, run_id, json.dumps(reports)))
+        db.execute(
+            "INSERT INTO run_reports(repo_id,run_id,reports_json) VALUES(?,?,?) "
+            "ON CONFLICT(repo_id,run_id) DO UPDATE SET reports_json=excluded.reports_json, error_message=''",
+            (repo_id, run_id, json.dumps(reports)),
+        )
+
+
+def save_report_error(repo_id, run_id, error_message):
+    """Keep a bounded report-fetch error alongside any partial report data."""
+    with _connect() as db:
+        db.execute(
+            "INSERT INTO run_reports(repo_id,run_id,reports_json,error_message) VALUES(?,?,?,?) "
+            "ON CONFLICT(repo_id,run_id) DO UPDATE SET error_message=excluded.error_message",
+            (repo_id, run_id, "{}", str(error_message or "Report fetch failed")[:500]),
+        )
 
 
 def save_explanation(repo_id, run_id, explanation):
     with _connect() as db:
-        db.execute("UPDATE run_reports SET explanation_json=? WHERE repo_id=? AND run_id=?",
-                   (json.dumps(explanation), repo_id, run_id))
+        db.execute(
+            "UPDATE run_reports SET explanation_json=? WHERE repo_id=? AND run_id=?",
+            (json.dumps(explanation), repo_id, run_id),
+        )

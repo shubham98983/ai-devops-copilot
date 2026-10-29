@@ -1,5 +1,4 @@
 import io
-import json
 import zipfile
 
 import httpx
@@ -25,10 +24,14 @@ def test_zip_limit_is_enforced():
 
 def test_download_uses_token_only_on_github_api_request():
     observed = []
+
     def handler(request):
         observed.append((str(request.url), request.headers.get("authorization")))
         return httpx.Response(200, content=b"zipdata")
+
     client = GitHubClient(token="secret-token", transport=httpx.MockTransport(handler))
     assert client.download_artifact("octo", "demo", 42) == b"zipdata"
-    assert observed == [("https://api.github.com/repos/octo/demo/actions/artifacts/42/zip", "Bearer secret-token")]
+    assert observed == [
+        ("https://api.github.com/repos/octo/demo/actions/artifacts/42/zip", "Bearer secret-token")
+    ]
     client._http.close()
