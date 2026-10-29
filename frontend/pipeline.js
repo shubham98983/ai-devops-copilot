@@ -113,9 +113,14 @@
     view.timer = setInterval(async () => {
       if (!view.repoId || !["pipeline", "dashboard"].includes(state.mode) || document.hidden) return;
       try {
+        const previousRuns = JSON.stringify(view.runs);
         await loadRuns(view.repoId);
-        if (state.mode === "dashboard") await loadSummary(view.repoId);
-        render();
+        if (state.mode === "dashboard") {
+          await loadSummary(view.repoId);
+          render();
+        } else if (JSON.stringify(view.runs) !== previousRuns) {
+          render();
+        }
       } catch (_) { /* keep the last good data */ }
     }, 15000);
   }
@@ -307,32 +312,42 @@
     if (state.mode === "pipeline") {
       panel.appendChild(el("h3", null, "Security findings"));
       const selector = el("select"); selector.setAttribute("aria-label", "Run security report");
-      view.runs.forEach((run) => {
+      const selectableRuns = view.runs.filter((run) => !/team approval gate/i.test(run.name || ""));
+      selectableRuns.forEach((run) => {
         const option = el("option", null, run.name + " #" + (run.run_number || run.run_id));
         option.value = run.run_id;
         option.selected = String(run.run_id) === String(view.selectedReportRunId);
         selector.appendChild(option);
       });
-      if (!view.runs.some((run) => String(run.run_id) === String(view.selectedReportRunId))) {
-        view.selectedReportRunId = view.runs.length ? view.runs[0].run_id : null;
+      if (!selectableRuns.some((run) => String(run.run_id) === String(view.selectedReportRunId))) {
+        view.selectedReportRunId = selectableRuns.length ? selectableRuns[0].run_id : null;
         if (selector.options.length) selector.options[0].selected = true;
       }
-      selector.addEventListener("change", () => {
-        view.selectedReportRunId = Number(selector.value);
-        render();
-      });
       panel.appendChild(selector);
       const selectedRunId = Number(view.selectedReportRunId);
       const loading = Boolean(view.loadingReports[selectedRunId]);
       const reportButton = el("button", "primary", loading ? "Loading findings…" : "Load security findings");
-      reportButton.disabled = !view.selectedReportRunId || loading;
-      reportButton.addEventListener("click", () => loadReport(selectedRunId));
+      reportButton.disabled = !view.selectedReportRunId || loading || !selectableRuns.length;
+      reportButton.addEventListener("click", () => loadReport(Number(view.selectedReportRunId)));
       panel.appendChild(reportButton);
-      const current = view.reports[selectedRunId];
-      if (current && current.findings && current.findings.length) panel.appendChild(renderSecurity(current, selectedRunId));
-      else if (current) panel.appendChild(el("p", "muted", "No security findings for this run."));
-      if (view.errors["report-" + selectedRunId]) panel.appendChild(el("p", "error", view.errors["report-" + selectedRunId]));
-      if (view.errors["explain-" + selectedRunId]) panel.appendChild(el("p", "error", view.errors["explain-" + selectedRunId]));
+      const results = el("div", "security-results");
+      panel.appendChild(results);
+      const showReport = (runId) => {
+        results.replaceChildren();
+        const report = view.reports[runId];
+        if (report && report.findings && report.findings.length) results.appendChild(renderSecurity(report, runId));
+        else if (report) results.appendChild(el("p", "muted", "No security findings for this run."));
+        if (view.errors["report-" + runId]) results.appendChild(el("p", "error", view.errors["report-" + runId]));
+        if (view.errors["explain-" + runId]) results.appendChild(el("p", "error", view.errors["explain-" + runId]));
+      };
+      selector.addEventListener("change", () => {
+        view.selectedReportRunId = Number(selector.value);
+        const runId = view.selectedReportRunId;
+        reportButton.disabled = Boolean(view.loadingReports[runId]);
+        reportButton.textContent = view.loadingReports[runId] ? "Loading findings…" : "Load security findings";
+        showReport(runId);
+      });
+      showReport(selectedRunId);
     }
     panel.appendChild(list);
   }

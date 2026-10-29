@@ -115,13 +115,17 @@ setTimeout(async () => {
     runItems = [
       { run_id: 16, run_number: 16, name: "CI", status: "completed", conclusion: "success" },
       { run_id: 15, run_number: 15, name: "CI", status: "completed", conclusion: "success" },
+      { run_id: 14, run_number: 3, name: "Team approval gate", status: "completed", conclusion: "success" },
     ];
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.ok(runRequests.length >= 2, "switching from Dashboard to Pipeline should load the runs");
     const selector = window.document.querySelector('select[aria-label="Run security report"]');
     assert.ok(selector);
+    assert.equal(selector.options.length, 2, "approval gate events should not be offered as CI report runs");
     selector.value = "15";
     selector.dispatchEvent(new window.Event("change", { bubbles: true }));
+    assert.equal(window.document.querySelector('select[aria-label="Run security report"]'), selector,
+      "changing the run should not replace the native selector");
     const loadButton = [...window.document.querySelectorAll("button")]
       .find((button) => button.textContent === "Load security findings");
     loadButton.click();
