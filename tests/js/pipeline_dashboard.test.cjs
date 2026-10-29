@@ -18,6 +18,7 @@ const selected = { id: "repo-1" };
 let intervalDelay = null;
 let reportAvailable = true;
 let runItems = [];
+let resolveReportRequest = null;
 window.setInterval = (callback, delay) => {
   intervalCallbacks.push(callback);
   intervalDelay = delay;
@@ -32,7 +33,17 @@ window.api = async (url) => {
   const reportMatch = url.match(/\/runs\/(\d+)\/reports$/);
   if (reportMatch) {
     reportRequests.push(Number(reportMatch[1]));
-    return { findings: [], explanation: null };
+    return new Promise((resolve, reject) => {
+      resolveReportRequest = () => {
+        if (Number(reportMatch[1]) === 14) reject(new Error("report unavailable"));
+        else resolve({
+          findings: Number(reportMatch[1]) === 16
+            ? [{ severity: "high", rule_id: "test.rule", title: "Finding for run 16", path: "app.py", line: 1 }]
+            : [],
+          explanation: null,
+        });
+      };
+    });
   }
   if (url.endsWith("/summary")) {
     summaryRequests.push(url);
@@ -99,6 +110,8 @@ setTimeout(async () => {
     assert.equal(summaryRequests.length, 2, "dashboard timer should refresh the summary");
     window.state.mode = "pipeline";
     window.updatePanels();
+    assert.match(window.document.getElementById("pipeline-panel").textContent, /CI\/CD pipeline/);
+    assert.doesNotMatch(window.document.getElementById("pipeline-panel").textContent, /Quality score/);
     runItems = [
       { run_id: 16, run_number: 16, name: "CI", status: "completed", conclusion: "success" },
       { run_id: 15, run_number: 15, name: "CI", status: "completed", conclusion: "success" },
@@ -112,13 +125,40 @@ setTimeout(async () => {
     const loadButton = [...window.document.querySelectorAll("button")]
       .find((button) => button.textContent === "Load security findings");
     loadButton.click();
+    assert.equal(
+      [...window.document.querySelectorAll("button")].find((button) => button.textContent.includes("Loading findings"))?.disabled,
+      true,
+      "report button should show a disabled loading state while fetching",
+    );
+    resolveReportRequest();
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.deepEqual(reportRequests, [15], "selected run should be used to load its report");
+    assert.match(window.document.getElementById("pipeline-panel").textContent, /No security findings for this run/);
     assert.equal(
       window.document.querySelector('select[aria-label="Run security report"]').value,
       "15",
       "rerendering after report load should keep the selected run",
     );
+    const secondSelector = window.document.querySelector('select[aria-label="Run security report"]');
+    secondSelector.value = "16";
+    secondSelector.dispatchEvent(new window.Event("change", { bubbles: true }));
+    [...window.document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Load security findings")
+      .click();
+    resolveReportRequest();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(reportRequests, [15, 16]);
+    assert.match(window.document.getElementById("pipeline-panel").textContent, /Finding for run 16/);
+    const thirdSelector = window.document.querySelector('select[aria-label="Run security report"]');
+    thirdSelector.value = "14";
+    thirdSelector.dispatchEvent(new window.Event("change", { bubbles: true }));
+    [...window.document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Load security findings")
+      .click();
+    resolveReportRequest();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(reportRequests, [15, 16, 14]);
+    assert.match(window.document.getElementById("pipeline-panel").textContent, /report unavailable/);
     window.state.mode = "dashboard";
     window.updatePanels();
     await new Promise((resolve) => setTimeout(resolve, 10));

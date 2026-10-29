@@ -7,7 +7,7 @@
   if (!panel) return;
 
   const view = {
-    repoId: null, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", syncing: false,
+    repoId: null, runs: [], status: null, summary: null, reports: {}, explaining: {}, loadingReports: {}, error: "", syncing: false,
     selectedReportRunId: null,
     open: {}, analyzing: {}, errors: {}, timer: null, loaded: false, summaryRepoId: null, mode: null,
   };
@@ -56,9 +56,14 @@
 
   async function loadReport(runId) {
     view.errors["report-" + runId] = "";
+    view.loadingReports[runId] = true;
+    render();
     try { view.reports[runId] = await api(base(view.repoId) + "/runs/" + runId + "/reports", { method: "POST" }); }
     catch (err) { view.errors["report-" + runId] = err.message; }
-    render();
+    finally {
+      view.loadingReports[runId] = false;
+      render();
+    }
   }
 
   async function explainSecurity(runId) {
@@ -93,7 +98,7 @@
 
   async function activate(repoId) {
     if (view.repoId !== repoId) {
-      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false, selectedReportRunId: null });
+      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, loadingReports: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false, selectedReportRunId: null });
       render();
       try { view.status = await api(base(repoId) + "/status"); } catch (err) { view.error = err.message; }
       try { await loadRuns(repoId); } catch (err) { view.error = view.error || err.message; }
@@ -318,9 +323,14 @@
       });
       panel.appendChild(selector);
       const selectedRunId = Number(view.selectedReportRunId);
-      const reportButton = el("button", "primary", "Load security findings"); reportButton.disabled = !view.selectedReportRunId; reportButton.addEventListener("click", () => loadReport(selectedRunId)); panel.appendChild(reportButton);
+      const loading = Boolean(view.loadingReports[selectedRunId]);
+      const reportButton = el("button", "primary", loading ? "Loading findings…" : "Load security findings");
+      reportButton.disabled = !view.selectedReportRunId || loading;
+      reportButton.addEventListener("click", () => loadReport(selectedRunId));
+      panel.appendChild(reportButton);
       const current = view.reports[selectedRunId];
-      if (current) panel.appendChild(renderSecurity(current, selectedRunId));
+      if (current && current.findings && current.findings.length) panel.appendChild(renderSecurity(current, selectedRunId));
+      else if (current) panel.appendChild(el("p", "muted", "No security findings for this run."));
       if (view.errors["report-" + selectedRunId]) panel.appendChild(el("p", "error", view.errors["report-" + selectedRunId]));
       if (view.errors["explain-" + selectedRunId]) panel.appendChild(el("p", "error", view.errors["explain-" + selectedRunId]));
     }
@@ -412,6 +422,7 @@
     const show = Boolean(repo && repo.status === "ready") && (state.mode === "pipeline" || state.mode === "dashboard");
     panel.hidden = !show;
     if (show) activate(repo.id); else stopTimer();
+    if (show && (repoChanged || modeChanged)) render();
     if (repo && repo.status === "ready" && (repoChanged || (state.mode === "dashboard" && modeChanged))) {
       loadSummary(repo.id).then(render).catch((err) => {
         view.error = err.message;
