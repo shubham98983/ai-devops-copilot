@@ -7,8 +7,8 @@
   if (!panel) return;
 
   const view = {
-    repoId: null, runs: [], status: null, summary: null, reports: {}, selectedReportRun: null, explaining: {}, error: "", syncing: false,
-    open: {}, analyzing: {}, errors: {}, timer: null, loaded: false,
+    repoId: null, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", syncing: false,
+    open: {}, analyzing: {}, errors: {}, timer: null, loaded: false, summaryRepoId: null, mode: null,
   };
 
   /* ---------- helpers ---------- */
@@ -45,8 +45,12 @@
   /* ---------- data ---------- */
   async function loadRuns(repoId) {
     view.runs = await api(base(repoId) + "/runs");
-    if (state.mode === "dashboard") view.summary = await api(base(repoId) + "/summary");
     view.loaded = true;
+  }
+
+  async function loadSummary(repoId) {
+    view.summary = await api(base(repoId) + "/summary");
+    view.summaryRepoId = repoId;
   }
 
   async function loadReport(runId) {
@@ -88,7 +92,7 @@
 
   async function activate(repoId) {
     if (view.repoId !== repoId) {
-      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, selectedReportRun: null, explaining: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false });
+      Object.assign(view, { repoId, runs: [], status: null, summary: null, reports: {}, explaining: {}, error: "", open: {}, analyzing: {}, errors: {}, loaded: false });
       render();
       try { view.status = await api(base(repoId) + "/status"); } catch (err) { view.error = err.message; }
       try { await loadRuns(repoId); } catch (err) { view.error = view.error || err.message; }
@@ -101,8 +105,12 @@
   function startTimer() {
     if (view.timer) return;
     view.timer = setInterval(async () => {
-      if (!view.repoId || state.mode !== "pipeline" || document.hidden) return;
-      try { await loadRuns(view.repoId); render(); } catch (_) { /* keep the last good data */ }
+      if (!view.repoId || !["pipeline", "dashboard"].includes(state.mode) || document.hidden) return;
+      try {
+        await loadRuns(view.repoId);
+        if (state.mode === "dashboard") await loadSummary(view.repoId);
+        render();
+      } catch (_) { /* keep the last good data */ }
     }, 15000);
   }
 
@@ -276,6 +284,11 @@
         "No GITHUB_TOKEN is set. You can list public runs (60 requests per hour), but downloading logs " +
         "and AI failure analysis need a token. Add GITHUB_TOKEN to .env and restart the server."));
     }
+    const reportErrors = view.summary && view.summary.report_errors;
+    if (state.mode === "dashboard" && reportErrors && reportErrors.length) {
+      const error = reportErrors[0];
+      panel.appendChild(el("p", "banner", "Reports unavailable: " + error.message + " (run " + error.run_id + ")"));
+    }
     if (view.error) panel.appendChild(el("p", "error", view.error));
 
     const list = el("div", "runs");
@@ -288,15 +301,13 @@
     if (state.mode === "pipeline") {
       panel.appendChild(el("h3", null, "Security findings"));
       const selector = el("select"); selector.setAttribute("aria-label", "Run security report");
-      view.runs.forEach((run) => { const option = el("option", null, run.name + " #" + (run.run_number || run.run_id)); option.value = run.run_id; if (String(run.run_id) === String(view.selectedReportRun)) option.selected = true; selector.appendChild(option); });
-      selector.addEventListener("change", () => { view.selectedReportRun = Number(selector.value); render(); });
+      view.runs.forEach((run) => { const option = el("option", null, run.name + " #" + (run.run_number || run.run_id)); option.value = run.run_id; selector.appendChild(option); });
       panel.appendChild(selector);
-      const reportButton = el("button", "primary", "Load security findings"); reportButton.addEventListener("click", () => { view.selectedReportRun = Number(selector.value); loadReport(view.selectedReportRun); }); panel.appendChild(reportButton);
-      const selected = view.selectedReportRun || Number(selector.value);
-      const current = view.reports[selected];
-      if (current) panel.appendChild(renderSecurity(current, selected));
-      if (view.errors["report-" + selected]) panel.appendChild(el("p", "error", view.errors["report-" + selected]));
-      if (view.errors["explain-" + selected]) panel.appendChild(el("p", "error", view.errors["explain-" + selected]));
+      const reportButton = el("button", "primary", "Load security findings"); reportButton.addEventListener("click", () => loadReport(Number(selector.value))); panel.appendChild(reportButton);
+      const current = view.reports[Number(selector.value)];
+      if (current) panel.appendChild(renderSecurity(current, Number(selector.value)));
+      if (view.errors["report-" + selector.value]) panel.appendChild(el("p", "error", view.errors["report-" + selector.value]));
+      if (view.errors["explain-" + selector.value]) panel.appendChild(el("p", "error", view.errors["explain-" + selector.value]));
     }
     panel.appendChild(list);
   }
@@ -304,19 +315,65 @@
   function renderDashboard() {
     const summary = view.summary;
     const cards = el("div", "dashboard-grid");
-    const latest = summary && summary.branches && summary.branches[0];
-    const addCard = (title, value, extra) => { const card = el("article", "dashboard-card"); card.appendChild(el("h3", null, title)); card.appendChild(el("strong", null, value)); if (extra) card.appendChild(el("p", "muted", extra)); cards.appendChild(card); };
-    addCard("CI status", latest ? latest.conclusion || latest.status : "No run", latest ? latest.branch : "");
+    const latest = summary && summary.latest_with_reports;
+    const source = latest ? latest.run_label : "No run with reports";
+    const addCard = (title, value, extra) => {
+      const card = el("article", "dashboard-card");
+      card.appendChild(el("h3", null, title));
+      card.appendChild(el("strong", null, value));
+      if (extra) card.appendChild(el("p", "muted", extra));
+      cards.appendChild(card);
+    };
+    addCard("CI status", latest ? latest.conclusion || latest.status : "No data", source);
     const tests = latest && latest.tests;
-    addCard("Tests", tests ? (tests.tests - tests.failures - tests.errors - tests.skipped) + " passed / " + (tests.failures + tests.errors) + " failed" : "No report");
-    addCard("Coverage", latest ? latest.coverage_percent + "%" : "No report");
-    addCard("Quality score", latest ? String(latest.quality_score) : "—", latest ? "Security " + latest.security + " · coverage " + latest.coverage + " · tests " + latest.test_pass_percent + "%" : "");
-    if (latest && latest.findings_by_severity) addCard("Security", "Critical " + latest.findings_by_severity.critical + " · High " + latest.findings_by_severity.high + " · Medium " + latest.findings_by_severity.medium + " · Low " + latest.findings_by_severity.low);
+    const testValue = tests ? tests.passed + " passed / " + tests.failed + " failed" : "No data";
+    addCard("Tests", testValue, source);
+    const coverageValue = latest && latest.parts.coverage !== null ? latest.coverage + "%" : "No data";
+    addCard("Coverage", coverageValue, source);
+    const breakdown = latest
+      ? "Security " + (latest.parts.security === null ? "No data" : latest.security)
+        + " · coverage " + (latest.parts.coverage === null ? "No data" : latest.coverage + "%")
+        + " · tests " + (latest.parts.tests === null ? "No data" : latest.test_pass_percent + "%")
+      : "No reports are available";
+    addCard("Quality score", latest && latest.quality_score !== null ? String(latest.quality_score) : "No data", breakdown + " · " + source);
+    if (latest && latest.parts.security !== null) {
+      const counts = latest.findings_by_severity;
+      addCard("Security", "Critical " + counts.critical + " · High " + counts.high + " · Medium " + counts.medium + " · Low " + counts.low, source);
+    } else {
+      addCard("Security", "No data", source);
+    }
     panel.appendChild(cards);
-    if (latest && latest.ai_top_actions && latest.ai_top_actions.length) { panel.appendChild(el("h3", null, "AI top actions")); const actions = el("ol"); latest.ai_top_actions.forEach((action) => actions.appendChild(el("li", null, action))); panel.appendChild(actions); }
     const scores = summary ? summary.last_10_scores : [];
-    const trend = el("svg", "score-trend"); trend.setAttribute("viewBox", "0 0 500 110"); trend.setAttribute("role", "img"); trend.setAttribute("aria-label", "Quality score trend for recent runs");
-    if (scores.length) { const points = scores.map((item, i) => (scores.length === 1 ? 250 : i * 480 / (scores.length - 1) + 10) + "," + (100 - item.score)).join(" "); const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline"); line.setAttribute("points", points); line.setAttribute("fill", "none"); line.setAttribute("stroke", "currentColor"); line.setAttribute("stroke-width", "3"); trend.appendChild(line); }
+    const namespace = "http://www.w3.org/2000/svg";
+    const svgNode = (name, attributes, text) => {
+      const node = document.createElementNS(namespace, name);
+      Object.entries(attributes || {}).forEach(([key, value]) => node.setAttribute(key, value));
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+    const trend = svgNode("svg", { class: "score-trend", viewBox: "0 0 500 110", role: "img", "aria-label": "Quality score trend for recent runs" });
+    trend.appendChild(svgNode("text", { x: "2", y: "14", class: "trend-axis-label" }, "100"));
+    trend.appendChild(svgNode("text", { x: "2", y: "104", class: "trend-axis-label" }, "0"));
+    if (scores.length) {
+      const points = scores.map((item, index) => ({
+        x: scores.length === 1 ? 250 : 28 + index * 460 / (scores.length - 1),
+        y: 96 - item.score * 0.8,
+        item,
+      }));
+      const polyline = svgNode("polyline", {
+        points: points.map((point) => point.x + "," + point.y).join(" "),
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "3",
+      });
+      trend.appendChild(polyline);
+      points.forEach((point) => {
+        const circle = svgNode("circle", { cx: point.x, cy: point.y, r: "4", fill: "currentColor" });
+        const run = view.runs.find((item) => item.run_id === point.item.run_id);
+        circle.appendChild(svgNode("title", {}, "Run #" + (run ? run.run_number : point.item.run_id) + ": score " + point.item.score));
+        trend.appendChild(circle);
+      });
+    }
     panel.appendChild(trend);
   }
 
@@ -334,8 +391,17 @@
   updatePanels = function () {
     baseUpdatePanels();
     const repo = selectedRepo();
+    const modeChanged = view.mode !== state.mode;
+    const repoChanged = Boolean(repo && view.summaryRepoId !== repo.id);
+    view.mode = state.mode;
     const show = Boolean(repo && repo.status === "ready") && (state.mode === "pipeline" || state.mode === "dashboard");
     panel.hidden = !show;
     if (show) activate(repo.id); else stopTimer();
+    if (repo && repo.status === "ready" && (repoChanged || (state.mode === "dashboard" && modeChanged))) {
+      loadSummary(repo.id).then(render).catch((err) => {
+        view.error = err.message;
+        render();
+      });
+    }
   };
 })();

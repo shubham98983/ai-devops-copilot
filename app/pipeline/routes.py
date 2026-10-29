@@ -98,13 +98,15 @@ def get_reports(repo_id: str, run_id: int):
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found. Sync the pipeline first.")
     existing = store.get_report(repo_id, run_id)
-    if existing:
+    if existing and not existing.get("error_message"):
         return existing["reports"]
     try:
         return sync.fetch_reports(repo_id, repo, run_id, get_client())
     except GitHubError as error:
+        store.save_report_error(repo_id, run_id, str(error))
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     except Exception as error:
+        store.save_report_error(repo_id, run_id, str(error))
         raise HTTPException(status_code=502, detail="Could not parse the run reports.") from error
 
 
@@ -135,50 +137,67 @@ def pipeline_summary(repo_id: str):
     runs = store.list_runs(repo_id, limit=100)
     branches = {}
     scored = []
+    latest_with_reports = None
+    report_errors = []
     for run in runs:
         report = store.get_report(repo_id, run["run_id"])
         data = (report or {}).get("reports", {})
         findings = data.get("findings", [])
         tests = data.get("tests") or {}
-        coverage = data.get("coverage_percent") or 0
-        tests = {
-            **tests,
-            "passed": max(
-                0,
-                int(tests.get("tests", 0))
-                - int(tests.get("failures", 0))
-                - int(tests.get("errors", 0))
-                - int(tests.get("skipped", 0)),
-            ),
-            "failed": int(tests.get("failures", 0)) + int(tests.get("errors", 0)),
+        available = data.get("available") or {
+            "security": bool(findings),
+            "tests": data.get("tests") is not None,
+            "coverage": data.get("coverage_percent") is not None,
         }
         breakdown = score.score(
-            findings,
-            coverage,
-            tests.get("tests", 0),
-            tests.get("failures", 0),
-            tests.get("errors", 0),
-            tests.get("skipped", 0),
+            findings=findings if available.get("security") else None,
+            coverage_percent=data.get("coverage_percent") if available.get("coverage") else None,
+            tests=tests if available.get("tests") else None,
+            has_security=bool(available.get("security")),
         )
+        test_counts = None
+        if available.get("tests"):
+            test_counts = {
+                **tests,
+                "passed": max(
+                    0,
+                    int(tests.get("tests", 0))
+                    - int(tests.get("failures", 0))
+                    - int(tests.get("errors", 0))
+                    - int(tests.get("skipped", 0)),
+                ),
+                "failed": int(tests.get("failures", 0)) + int(tests.get("errors", 0)),
+            }
         item = {
             "run_id": run["run_id"],
+            "run_number": run.get("run_number"),
+            "name": run.get("name", "CI"),
+            "run_label": f"Run #{run.get('run_number') or run['run_id']} on {run.get('branch') or 'unknown'}",
             "branch": run["branch"],
             "status": run["status"],
             "conclusion": run["conclusion"],
-            "tests": tests,
-            "coverage_percent": coverage,
+            "created_at": run["created_at"],
+            "tests": test_counts,
+            "coverage_percent": data.get("coverage_percent") if available.get("coverage") else None,
             "findings_by_severity": breakdown["findings"],
             **breakdown,
         }
-        item["ai_top_actions"] = ((report or {}).get("explanation") or {}).get("top_actions", [])
+        if report and report.get("error_message"):
+            item["report_error"] = report["error_message"]
+            report_errors.append(
+                {"run_id": run["run_id"], "branch": run["branch"], "message": report["error_message"]}
+            )
         if run["branch"] not in branches:
             branches[run["branch"]] = item
-        if len(scored) < 10:
+        if item["has_reports"] and latest_with_reports is None:
+            latest_with_reports = item
+        if item["quality_score"] is not None and len(scored) < 10:
             scored.append(
-                {
-                    "run_id": run["run_id"],
-                    "score": breakdown["quality_score"],
-                    "created_at": run["created_at"],
-                }
+                {"run_id": run["run_id"], "score": item["quality_score"], "created_at": run["created_at"]}
             )
-    return {"branches": list(branches.values()), "last_10_scores": list(reversed(scored))}
+    return {
+        "branches": list(branches.values()),
+        "latest_with_reports": latest_with_reports,
+        "report_errors": report_errors,
+        "last_10_scores": list(reversed(scored)),
+    }

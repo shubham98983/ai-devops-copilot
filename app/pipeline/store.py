@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS runs (
 ;
 CREATE TABLE IF NOT EXISTS run_reports (
     repo_id TEXT NOT NULL, run_id INTEGER NOT NULL, reports_json TEXT NOT NULL DEFAULT '{}',
-    explanation_json TEXT NOT NULL DEFAULT '', PRIMARY KEY(repo_id, run_id)
+    explanation_json TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(repo_id, run_id)
 )
 """
 
@@ -51,7 +52,10 @@ def _connect():
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(settings.data_dir / "registry.db")
     connection.row_factory = sqlite3.Row
-    connection.execute(SCHEMA)
+    connection.executescript(SCHEMA)
+    report_columns = {row["name"] for row in connection.execute("PRAGMA table_info(run_reports)")}
+    if "error_message" not in report_columns:
+        connection.execute("ALTER TABLE run_reports ADD COLUMN error_message TEXT NOT NULL DEFAULT ''")
     return connection
 
 
@@ -125,8 +129,18 @@ def save_report(repo_id, run_id, reports):
     with _connect() as db:
         db.execute(
             "INSERT INTO run_reports(repo_id,run_id,reports_json) VALUES(?,?,?) "
-            "ON CONFLICT(repo_id,run_id) DO UPDATE SET reports_json=excluded.reports_json",
+            "ON CONFLICT(repo_id,run_id) DO UPDATE SET reports_json=excluded.reports_json, error_message=''",
             (repo_id, run_id, json.dumps(reports)),
+        )
+
+
+def save_report_error(repo_id, run_id, error_message):
+    """Keep a bounded report-fetch error alongside any partial report data."""
+    with _connect() as db:
+        db.execute(
+            "INSERT INTO run_reports(repo_id,run_id,reports_json,error_message) VALUES(?,?,?,?) "
+            "ON CONFLICT(repo_id,run_id) DO UPDATE SET error_message=excluded.error_message",
+            (repo_id, run_id, "{}", str(error_message or "Report fetch failed")[:500]),
         )
 
 
